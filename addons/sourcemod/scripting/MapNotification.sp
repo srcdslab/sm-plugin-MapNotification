@@ -48,7 +48,7 @@ public void OnMapStart()
     Format(sWebhook, sizeof(sWebhook), "mapnotification");
 
     char sMessage[4096];
-    Format(sMessage, sizeof(sMessage), ">>> %s\\n%s\\n%s\\n%s", sMap, sPlayerCount, sQuickJoin, sTime);
+    Format(sMessage, sizeof(sMessage), ">>> %s\n%s\n%s\n%s", sMap, sPlayerCount, sQuickJoin, sTime);
 
     Discord_SendMessage(sWebhook, sMessage);
 }
