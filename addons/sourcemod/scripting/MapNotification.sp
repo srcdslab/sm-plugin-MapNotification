@@ -34,7 +34,7 @@ public void OnMapStart()
     char sQuickJoin[255];
     char sIP[32] = "";
     char sPort[310] = "";
-    ConVar cIP = FindConVar("ip");
+    ConVar cIP = FindConVar("net_public_adr");
     ConVar cHostPort = FindConVar("hostport");
 
     if (cIP != null && cHostPort != null)
