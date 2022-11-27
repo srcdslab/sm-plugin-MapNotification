@@ -1,8 +1,6 @@
 #include <sourcemod>
 #include <Discord>
 
-#define PLUGIN_VERSION "1.0"
-
 #pragma newdecls required
 
 public Plugin myinfo = 
@@ -10,8 +8,8 @@ public Plugin myinfo =
     name = "MapNotification",
     author = "maxime1907",
     description = "Sends a server info message to discord on map start",
-    version = PLUGIN_VERSION,
-    url = "https://nide.gg"
+    version = "1.0.0",
+    url = ""
 };
 
 public void OnMapStart()
