@@ -1,16 +1,25 @@
 #include <sourcemod>
-#include <Discord>
+#include <discordWebhookAPI>
 
 #pragma newdecls required
+
+ConVar g_cvWebhook;
 
 public Plugin myinfo = 
 {
     name = "MapNotification",
     author = "maxime1907",
     description = "Sends a server info message to discord on map start",
-    version = "1.0.0",
+    version = "1.1.0",
     url = ""
 };
+
+public void OnPluginStart()
+{
+    g_cvWebhook = CreateConVar("sm_mapnotification_webhook", "", "The webhook URL of your Discord channel.", FCVAR_PROTECTED);
+
+    AutoExecConfig(true);
+}
 
 public void OnMapStart()
 {
@@ -42,11 +51,21 @@ public void OnMapStart()
     }
     Format(sQuickJoin, sizeof(sQuickJoin), "Quick join: **steam://connect/%s:%s**", sIP, sPort);
 
-    char sWebhook[64];
-    Format(sWebhook, sizeof(sWebhook), "mapnotification");
+    char szWebhookURL[1000];
+    g_cvWebhook.GetString(szWebhookURL, sizeof szWebhookURL);
 
     char sMessage[4096];
     Format(sMessage, sizeof(sMessage), ">>> %s\n%s\n%s\n%s", sMap, sPlayerCount, sQuickJoin, sTime);
 
-    Discord_SendMessage(sWebhook, sMessage);
+    Webhook webhook = new Webhook(sMessage);
+    webhook.Execute(szWebhookURL, OnWebHookExecuted);
+    delete webhook;
+}
+
+public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
+{
+    if (response.Status != HTTPStatus_NoContent)
+    {
+        LogError("Failed to send mapnotification webhook")
+    }
 }
