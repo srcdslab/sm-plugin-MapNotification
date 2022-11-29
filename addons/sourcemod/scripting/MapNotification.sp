@@ -10,7 +10,7 @@ public Plugin myinfo =
     name = "MapNotification",
     author = "maxime1907",
     description = "Sends a server info message to discord on map start",
-    version = "1.1.1",
+    version = "1.1.2",
     url = ""
 };
 
@@ -64,7 +64,7 @@ public void OnConfigsExecuted()
 
 public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
 {
-    if (response.Status != HTTPStatus_NoContent)
+    if (response.Status != HTTPStatus_OK)
     {
         LogError("Failed to send mapnotification webhook");
     }
