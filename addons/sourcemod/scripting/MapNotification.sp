@@ -84,9 +84,8 @@ public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
 		if(retries < 3)
 			PrintToServer("[MapNotifcations] Failed to send the webhook. Resending it .. (%d/3)", retries);
 			
-		if(retries >= 3)
+		else if(retries >= 3)
 		{
-			PrintToServer("[MapNotifcations] Failed to send the webhook. Aborting after %d retries.", retries);
 			LogError("[MapNotifcations] Failed to send the webhook after %d retries.", retries);
 			delete pack;
 			delete hook;
@@ -97,9 +96,9 @@ public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
 		pack.ReadString(webhookURL, sizeof(webhookURL));
 		
 		DataPack newPack;
-		CreateDataTimer(0.5, ExecuteWebhook_Timer, newPack);
 		newPack.WriteCell(view_as<int>(hook));
 		newPack.WriteString(webhookURL);
+		CreateDataTimer(0.5, ExecuteWebhook_Timer, newPack);
 		delete pack;
 		retries++;
 		return;
