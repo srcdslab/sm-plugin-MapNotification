@@ -3,7 +3,9 @@
 
 #pragma newdecls required
 
-ConVar g_cvWebhook;
+#define WEBHOOK_URL_MAX_SIZE	1000
+
+ConVar g_cvWebhook, g_cvWebhookRetry;
 
 public Plugin myinfo = 
 {
@@ -17,6 +19,7 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	g_cvWebhook = CreateConVar("sm_mapnotification_webhook", "", "The webhook URL of your Discord channel.", FCVAR_PROTECTED);
+	g_cvWebhookRetry = CreateConVar("sm_mapnotification_webhook_retry", "3", "Number of retries if webhook fails.", FCVAR_PROTECTED);
 
 	AutoExecConfig(true);
 }
@@ -49,12 +52,12 @@ public void OnConfigsExecuted()
 		cIP.GetString(sIP, sizeof(sIP));
 		cHostPort.GetString(sPort, sizeof(sPort));
 	}
-	
+
 	Format(sQuickJoin, sizeof(sQuickJoin), "Quick join: **steam://connect/%s:%s**", sIP, sPort);
 
-	char szWebhookURL[1000];
-	g_cvWebhook.GetString(szWebhookURL, sizeof szWebhookURL);
-	if(!szWebhookURL[0])
+	char sWebhookURL[WEBHOOK_URL_MAX_SIZE];
+	g_cvWebhook.GetString(sWebhookURL, sizeof sWebhookURL);
+	if(!sWebhookURL[0])
 	{
 		LogError("[MapNotifications] No webhook found or specified.");
 		return;
@@ -63,63 +66,51 @@ public void OnConfigsExecuted()
 	char sMessage[4096];
 	Format(sMessage, sizeof(sMessage), ">>> %s\n%s\n%s\n%s", sMap, sPlayerCount, sQuickJoin, sTime);
 
+	SendWebHook(sMessage, sWebhookURL);
+}
+
+stock void SendWebHook(char sMessage[4096], char sWebhookURL[WEBHOOK_URL_MAX_SIZE])
+{
 	Webhook webhook = new Webhook(sMessage);
-	
+
 	DataPack pack = new DataPack();
-	pack.WriteCell(view_as<int>(webhook));
-	pack.WriteString(szWebhookURL);
-	
-	webhook.Execute(szWebhookURL, OnWebHookExecuted, pack);
+	pack.WriteString(sMessage);
+	pack.WriteString(sWebhookURL);
+
+	webhook.Execute(sWebhookURL, OnWebHookExecuted, pack);
+
+	delete webhook;
 }
 
 public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
 {
-	static int retries;
-	
+	static int retries = 0;
+
 	pack.Reset();
-	Webhook hook = view_as<Webhook>(pack.ReadCell());
-	
+
+	char sMessage[4096];
+	pack.ReadString(sMessage, sizeof(sMessage));
+
+	char sWebhookURL[WEBHOOK_URL_MAX_SIZE];
+	pack.ReadString(sWebhookURL, sizeof(sWebhookURL));
+
+	delete pack;
+
 	if (response.Status != HTTPStatus_OK)
 	{
-		if(retries < 3)
-			PrintToServer("[MapNotifcations] Failed to send the webhook. Resending it .. (%d/3)", retries);
-			
-		else if(retries >= 3)
+		if (retries < g_cvWebhookRetry.IntValue)
 		{
-			LogError("[MapNotifcations] Failed to send the webhook after %d retries.", retries);
-			delete pack;
-			delete hook;
+			PrintToServer("[MapNotifcations] Failed to send the webhook. Resending it .. (%d/%d)", retries, g_cvWebhookRetry.IntValue);
+
+			SendWebHook(sMessage, sWebhookURL);
+			retries++;
 			return;
 		}
-		
-		char webhookURL[PLATFORM_MAX_PATH];
-		pack.ReadString(webhookURL, sizeof(webhookURL));
-		
-		DataPack newPack;
-		CreateDataTimer(0.5, ExecuteWebhook_Timer, newPack);
-		newPack.WriteCell(view_as<int>(hook));
-		newPack.WriteString(webhookURL);
-		delete pack;
-		retries++;
-		return;
+		else
+		{
+			LogError("[MapNotifcations] Failed to send the webhook after %d retries, aborting.", retries);
+		}
 	}
-	
-	delete pack;
-	delete hook;
-	retries = 0;
-}
 
-Action ExecuteWebhook_Timer(Handle timer, DataPack pack)
-{
-	pack.Reset();
-	Webhook hook = view_as<Webhook>(pack.ReadCell());
-	
-	char webhookURL[PLATFORM_MAX_PATH];
-	pack.ReadString(webhookURL, sizeof(webhookURL));
-	
-	DataPack newPack = new DataPack();
-	newPack.WriteCell(view_as<int>(hook));
-	newPack.WriteString(webhookURL);	
-	hook.Execute(webhookURL, OnWebHookExecuted, newPack);
-	return Plugin_Continue;
+	retries = 0;
 }
