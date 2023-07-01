@@ -9,6 +9,10 @@
 bool g_bPreMapEnd = false
 
 ConVar 
+	g_cvAvatar,
+	g_cvUsername,
+	g_cvColorStart,
+	g_cvColorEnd,
 	g_cvWebhook, 
 	g_cvWebhookRetry,
 	g_cvEndOfMapInfo, 
@@ -29,12 +33,16 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
+	g_cvAvatar = CreateConVar("sm_mapnotification_avatar", "https://avatars.githubusercontent.com/u/110772618?s=200&v=4", "URL to Avatar image.");
+	g_cvUsername = CreateConVar("sm_mapnotification_username", "Map Notification", "Discord username.");
+	g_cvColorStart = CreateConVar("sm_mapnotification_colors_start", "4244579", "Decimal color code for map START\nHex to Decimal - https://www.binaryhexconverter.com/hex-to-decimal-converter");
+	g_cvColorEnd = CreateConVar("sm_mapnotification_colors_end", "11678774", "Decimal color code for map END\nHex to Decimal - https://www.binaryhexconverter.com/hex-to-decimal-converter");
 	g_cvWebhook = CreateConVar("sm_mapnotification_webhook", "", "The webhook URL of your Discord channel.", FCVAR_PROTECTED);
 	g_cvWebhookRetry = CreateConVar("sm_mapnotification_webhook_retry", "3", "Number of retries if webhook fails.", FCVAR_PROTECTED);
 	g_cvEndOfMapInfo = CreateConVar("sm_mapnotification_endmap_info", "1", "Print a notification for the map end.", _, true, 0.0, true, 1.0);
 	g_cCountBots = CreateConVar("sm_mapnotification_count_bots", "1", "Should we count bots as players ?[0 = No, 1 = Yes]", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_cvRedirectURL = CreateConVar("sm_mapnotification_redirect", "https://nide.gg/connect/", "URL to your redirect.php file.");
-	g_cvMapThumbailURL = CreateConVar("sm_mapnotification_mapthumbailurl", "https://bans.nide.gg/images/maps/", "URL where you store map thumbail files.");
+	g_cvMapThumbailURL = CreateConVar("sm_mapnotification_mapthumbailurl", "https://bans.nide.gg/images/maps/", "URL where you store map thumbail files. (.JPG ONLY)");
 
 	AutoExecConfig(true);
 
@@ -84,6 +92,16 @@ public Action Timer_SendMessage(Handle timer)
 		return Plugin_Handled;
 	}
 
+	/* Webhook UserName */
+	char sName[128];
+	g_cvUsername.GetString(sName, sizeof(sName));
+	if (strlen(sName) < 1)
+		FormatEx(sName, sizeof(sName), "Map Notification");
+
+	/* Webhook Avatar */
+	char sAvatar[256];
+	g_cvAvatar.GetString(sAvatar, sizeof(sAvatar));
+
 	/* Server Name */
 	char sHostname[512];
 	ConVar cvar = FindConVar("hostname");
@@ -132,8 +150,8 @@ public Action Timer_SendMessage(Handle timer)
 
 	/* Let's build the Embed */
 	Webhook webhook = new Webhook("");
-	webhook.SetUsername("Map Notification");
-	webhook.SetAvatarURL("https://avatars.githubusercontent.com/u/110772618?s=200&v=4");
+	webhook.SetUsername(sName);
+	webhook.SetAvatarURL(sAvatar);
 	
 	/* Header */
 	Embed Embed_1 = new Embed(sHostname);
@@ -216,7 +234,7 @@ public void OnWebHookExecuted(HTTPResponse response, any data)
 int GetColor()
 {
 	if (g_bPreMapEnd)
-		return 11678774;
+		return g_cvColorEnd.IntValue;
 	else
-		return 4244579;
+		return g_cvColorStart.IntValue;
 }
