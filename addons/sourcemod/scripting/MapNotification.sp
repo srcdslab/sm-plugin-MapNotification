@@ -1,108 +1,224 @@
 #include <sourcemod>
 #include <discordWebhookAPI>
+#include "utilshelper.inc"
 
 #pragma newdecls required
 
 #define WEBHOOK_URL_MAX_SIZE	1000
 
-ConVar g_cvWebhook, g_cvWebhookRetry;
+bool g_bPreMapEnd = false
+
+ConVar 
+	g_cvAvatar,
+	g_cvUsername,
+	g_cvColorStart,
+	g_cvColorEnd,
+	g_cvWebhook, 
+	g_cvWebhookRetry,
+	g_cvEndOfMapInfo, 
+	g_cvNetPublicAddr, 
+	g_cvRedirectURL,
+	g_cvMapThumbailURL,
+	g_cvPort,
+	g_cCountBots;
 
 public Plugin myinfo = 
 {
 	name = "MapNotification",
-	author = "maxime1907",
+	author = "maxime1907, .Rushaway",
 	description = "Sends a server info message to discord on map start",
-	version = "1.1.3",
+	version = "2.0.1",
 	url = ""
 };
 
 public void OnPluginStart()
 {
+	g_cvAvatar = CreateConVar("sm_mapnotification_avatar", "https://avatars.githubusercontent.com/u/110772618?s=200&v=4", "URL to Avatar image.");
+	g_cvUsername = CreateConVar("sm_mapnotification_username", "Map Notification", "Discord username.");
+	g_cvColorStart = CreateConVar("sm_mapnotification_colors_start", "4244579", "Decimal color code for map START\nHex to Decimal - https://www.binaryhexconverter.com/hex-to-decimal-converter");
+	g_cvColorEnd = CreateConVar("sm_mapnotification_colors_end", "11678774", "Decimal color code for map END\nHex to Decimal - https://www.binaryhexconverter.com/hex-to-decimal-converter");
 	g_cvWebhook = CreateConVar("sm_mapnotification_webhook", "", "The webhook URL of your Discord channel.", FCVAR_PROTECTED);
 	g_cvWebhookRetry = CreateConVar("sm_mapnotification_webhook_retry", "3", "Number of retries if webhook fails.", FCVAR_PROTECTED);
+	g_cvEndOfMapInfo = CreateConVar("sm_mapnotification_endmap_info", "1", "Print a notification for the map end.", _, true, 0.0, true, 1.0);
+	g_cCountBots = CreateConVar("sm_mapnotification_count_bots", "1", "Should we count bots as players ?[0 = No, 1 = Yes]", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	g_cvRedirectURL = CreateConVar("sm_mapnotification_redirect", "https://nide.gg/connect/", "URL to your redirect.php file.");
+	g_cvMapThumbailURL = CreateConVar("sm_mapnotification_mapthumbailurl", "https://bans.nide.gg/images/maps/", "URL where you store map thumbail files. (.JPG ONLY)");
 
 	AutoExecConfig(true);
+
+	RegAdminCmd("sm_mapnotification", Command_ForceMessage, ADMFLAG_ROOT, "Test the discord map notification");
+
+	HookEvent("cs_win_panel_match", Event_WinPanel);
 }
 
-public void OnConfigsExecuted()
+public void OnMapStart()
 {
-	char sTimeFormatted[64];
-	char sTime[128];
-	int iTime = GetTime();
-	FormatTime(sTimeFormatted, sizeof(sTimeFormatted), "%m/%d/%Y @ %H:%M:%S", iTime);
-	Format(sTime, sizeof(sTime), "Date: **%s**", sTimeFormatted);
+	g_bPreMapEnd = false;
+	CreateTimer(5.0, Timer_SendMessage, _, TIMER_FLAG_NO_MAPCHANGE);
+}
 
-	char sMapName[PLATFORM_MAX_PATH];
-	char sMap[PLATFORM_MAX_PATH+64];
-	GetCurrentMap(sMapName, sizeof(sMapName));
-	Format(sMap, sizeof(sMap), "Map: **%s**", sMapName);
+public void Event_WinPanel(Handle event, const char[] name, bool dontBroadcast)
+{
+	if (!g_cvEndOfMapInfo)
+		return;
 
-	char sPlayerCount[64];
-	int iClients = GetClientCount(false);
-	Format(sPlayerCount, sizeof(sPlayerCount), "Players: **%d/%d**", iClients, MaxClients);
+	int timeLeft;
+	if (!GetMapTimeLeft(timeLeft))
+		return;
 
-	char sQuickJoin[255];
-	char sIP[32] = "";
-	char sPort[310] = "";
-	ConVar cIP = FindConVar("net_public_adr");
-	ConVar cHostPort = FindConVar("hostport");
+	if (timeLeft >= 0)
+		return;
 
-	if (cIP != null && cHostPort != null)
-	{
-		cIP.GetString(sIP, sizeof(sIP));
-		cHostPort.GetString(sPort, sizeof(sPort));
-	}
+	g_bPreMapEnd = true;
 
-	Format(sQuickJoin, sizeof(sQuickJoin), "Quick join: **steam://connect/%s:%s**", sIP, sPort);
+	CreateTimer(0.1, Timer_SendMessage, _, TIMER_FLAG_NO_MAPCHANGE);
+}
 
+public Action Command_ForceMessage(int client, int argc)
+{
+	if (argc < 1)
+		CreateTimer(0.1, Timer_SendMessage, _, TIMER_FLAG_NO_MAPCHANGE);
+	ReplyToCommand(client, "[MapNotificaiton] Executing SendMessage function.");
+	return Plugin_Handled;
+}
+
+public Action Timer_SendMessage(Handle timer)
+{
 	char sWebhookURL[WEBHOOK_URL_MAX_SIZE];
 	g_cvWebhook.GetString(sWebhookURL, sizeof sWebhookURL);
-	if(!sWebhookURL[0])
+	if (!sWebhookURL[0])
 	{
 		LogError("[MapNotifications] No webhook found or specified.");
-		return;
+		return Plugin_Handled;
 	}
+
+	/* Webhook UserName */
+	char sName[128];
+	g_cvUsername.GetString(sName, sizeof(sName));
+	if (strlen(sName) < 1)
+		FormatEx(sName, sizeof(sName), "Map Notification");
+
+	/* Webhook Avatar */
+	char sAvatar[256];
+	g_cvAvatar.GetString(sAvatar, sizeof(sAvatar));
+
+	/* Server Name */
+	char sHostname[512];
+	ConVar cvar = FindConVar("hostname");
+	cvar.GetString(sHostname, sizeof(sHostname));
+
+	/* Map Name */
+	char sMapName[PLATFORM_MAX_PATH], sMapNameLower[PLATFORM_MAX_PATH];
+	GetCurrentMap(sMapName, sizeof(sMapName));
+	GetCurrentMap(sMapNameLower, sizeof(sMapNameLower));
+
+	/* Players Count */
+	char sCount[64];
+	int iMaxPlayers = MaxClients;
+	int iConnected = GetClientCount(false);
+	if (g_cCountBots.BoolValue)
+	{
+		ConVar bot = FindConVar("bot_quota");
+		int iBots = GetConVarInt(bot);
+		iConnected = iConnected - iBots;
+	}
+	Format(sCount, sizeof(sCount), "%d/%d", iConnected, iMaxPlayers);
+
+	/* Discord Color Embed */
+	int Color = GetColor();
+
+	/* Quick Connect */
+	g_cvPort = FindConVar("hostport");
+	g_cvNetPublicAddr = FindConVar("net_public_adr");
+
+	char sConnect[256], sURL[256], sNetIP[32], sNetPort[32];
+	GetConVarString(g_cvRedirectURL, sURL, sizeof(sURL));
+
+	if (g_cvPort != null)
+		GetConVarString(g_cvPort, sNetPort, sizeof (sNetPort));
+
+	if (g_cvNetPublicAddr != null)
+		GetConVarString(g_cvNetPublicAddr, sNetIP, sizeof(sNetIP));
+
+	Format(sConnect, sizeof(sConnect), "[%s:%s](%s?ip=%s&port=%s)", sNetIP, sNetPort, sURL, sNetIP, sNetPort);
+
+	/* Generate map images */
+	char sThumb[256], sThumbailURL[256];
+	StringToLowerCase(sMapNameLower);
+	GetConVarString(g_cvMapThumbailURL, sThumbailURL, sizeof(sThumbailURL));
+	Format(sThumb, sizeof(sThumb), "%s/%s.jpg", sThumbailURL, sMapNameLower);
+
+	/* Let's build the Embed */
+	Webhook webhook = new Webhook("");
+	webhook.SetUsername(sName);
+	webhook.SetAvatarURL(sAvatar);
 	
-	char sMessage[4096];
-	Format(sMessage, sizeof(sMessage), ">>> %s\n%s\n%s\n%s", sMap, sPlayerCount, sQuickJoin, sTime);
+	/* Header */
+	Embed Embed_1 = new Embed(sHostname);
+	Embed_1.SetTimeStampNow();
+	Embed_1.SetColor(Color);
 
-	SendWebHook(sMessage, sWebhookURL);
-}
+	/* Map Image */
+	EmbedThumbnail thumbnail1 = new EmbedThumbnail();
+	thumbnail1.SetURL(sThumb);
+	Embed_1.SetThumbnail(thumbnail1);
+	delete thumbnail1;
+	
+	/* Fields */
+	EmbedField Field_Map = new EmbedField();
+	Field_Map.SetName("Now Playing:");
+	Field_Map.SetValue(sMapName);
+	Embed_1.AddField(Field_Map);
 
-stock void SendWebHook(char sMessage[4096], char sWebhookURL[WEBHOOK_URL_MAX_SIZE])
-{
-	Webhook webhook = new Webhook(sMessage);
+	EmbedField Field_Players = new EmbedField();
+	Field_Players.SetName("Players:");
+	Field_Players.SetValue(sCount);
+	Embed_1.AddField(Field_Players);
 
-	DataPack pack = new DataPack();
-	pack.WriteString(sMessage);
-	pack.WriteString(sWebhookURL);
+	if (g_bPreMapEnd)
+	{
+		char nextMap[64];
+		if (!GetNextMap(nextMap, sizeof(nextMap)))
+			Format(nextMap, sizeof(nextMap), "Error: can't get nextmap data");
 
-	webhook.Execute(sWebhookURL, OnWebHookExecuted, pack);
+		EmbedField Field_NextMap = new EmbedField();
+		Field_NextMap.SetName("Nextmap:");
+		Field_NextMap.SetValue(nextMap);
+		Field_NextMap.SetInline(false);
+		Embed_1.AddField(Field_NextMap);
+	}
 
+	EmbedField Field_Connect = new EmbedField();
+	Field_Connect.SetName("Quick Connect:");
+	Field_Connect.SetValue(sConnect);
+	Field_Connect.SetInline(false);
+	Embed_1.AddField(Field_Connect);
+	
+	EmbedFooter Footer = new EmbedFooter("");
+	//Footer.SetIconURL("https://github.githubassets.com/images/icons/emoji/unicode/1f55c.png?v8");
+	Embed_1.SetFooter(Footer);
+	delete Footer;
+
+	/* Generate the Embed */
+	webhook.AddEmbed(Embed_1);
+
+	/* Push the message */
+	webhook.Execute(sWebhookURL, OnWebHookExecuted);
 	delete webhook;
+
+	return Plugin_Handled;
 }
 
-public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
+public void OnWebHookExecuted(HTTPResponse response, any data)
 {
 	static int retries = 0;
-
-	pack.Reset();
-
-	char sMessage[4096];
-	pack.ReadString(sMessage, sizeof(sMessage));
-
-	char sWebhookURL[WEBHOOK_URL_MAX_SIZE];
-	pack.ReadString(sWebhookURL, sizeof(sWebhookURL));
-
-	delete pack;
 
 	if (response.Status != HTTPStatus_OK)
 	{
 		if (retries < g_cvWebhookRetry.IntValue)
 		{
 			PrintToServer("[MapNotifcations] Failed to send the webhook. Resending it .. (%d/%d)", retries, g_cvWebhookRetry.IntValue);
-
-			SendWebHook(sMessage, sWebhookURL);
+			CreateTimer(0.1, Timer_SendMessage, _, TIMER_FLAG_NO_MAPCHANGE);
 			retries++;
 			return;
 		}
@@ -113,4 +229,12 @@ public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
 	}
 
 	retries = 0;
+}
+
+int GetColor()
+{
+	if (g_bPreMapEnd)
+		return g_cvColorEnd.IntValue;
+	else
+		return g_cvColorStart.IntValue;
 }
