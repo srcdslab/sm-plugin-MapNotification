@@ -27,7 +27,7 @@ public Plugin myinfo =
 	name = "MapNotification",
 	author = "maxime1907, .Rushaway",
 	description = "Sends a server info message to discord on map start",
-	version = "2.0.1",
+	version = "2.0.2",
 	url = ""
 };
 
@@ -106,6 +106,7 @@ public Action Timer_SendMessage(Handle timer)
 	char sHostname[512];
 	ConVar cvar = FindConVar("hostname");
 	cvar.GetString(sHostname, sizeof(sHostname));
+	delete cvar;
 
 	/* Map Name */
 	char sMapName[PLATFORM_MAX_PATH], sMapNameLower[PLATFORM_MAX_PATH];
