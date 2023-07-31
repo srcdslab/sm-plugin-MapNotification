@@ -122,6 +122,7 @@ public Action Timer_SendMessage(Handle timer)
 		ConVar bot = FindConVar("bot_quota");
 		int iBots = GetConVarInt(bot);
 		iConnected = iConnected - iBots;
+		delete bot;
 	}
 	Format(sCount, sizeof(sCount), "%d/%d", iConnected, iMaxPlayers);
 
@@ -142,6 +143,9 @@ public Action Timer_SendMessage(Handle timer)
 		GetConVarString(g_cvNetPublicAddr, sNetIP, sizeof(sNetIP));
 
 	Format(sConnect, sizeof(sConnect), "[%s:%s](%s?ip=%s&port=%s)", sNetIP, sNetPort, sURL, sNetIP, sNetPort);
+
+	delete g_cvPort;
+	delete g_cvNetPublicAddr;
 
 	/* Generate map images */
 	char sThumb[256], sThumbailURL[256];
