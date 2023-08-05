@@ -27,7 +27,7 @@ public Plugin myinfo =
 	name = "MapNotification",
 	author = "maxime1907, .Rushaway",
 	description = "Sends a server info message to discord on map start",
-	version = "2.0.1",
+	version = "2.0.2",
 	url = ""
 };
 
@@ -106,6 +106,7 @@ public Action Timer_SendMessage(Handle timer)
 	char sHostname[512];
 	ConVar cvar = FindConVar("hostname");
 	cvar.GetString(sHostname, sizeof(sHostname));
+	delete cvar;
 
 	/* Map Name */
 	char sMapName[PLATFORM_MAX_PATH], sMapNameLower[PLATFORM_MAX_PATH];
@@ -121,6 +122,7 @@ public Action Timer_SendMessage(Handle timer)
 		ConVar bot = FindConVar("bot_quota");
 		int iBots = GetConVarInt(bot);
 		iConnected = iConnected - iBots;
+		delete bot;
 	}
 	Format(sCount, sizeof(sCount), "%d/%d", iConnected, iMaxPlayers);
 
@@ -141,6 +143,9 @@ public Action Timer_SendMessage(Handle timer)
 		GetConVarString(g_cvNetPublicAddr, sNetIP, sizeof(sNetIP));
 
 	Format(sConnect, sizeof(sConnect), "[%s:%s](%s?ip=%s&port=%s)", sNetIP, sNetPort, sURL, sNetIP, sNetPort);
+
+	delete g_cvPort;
+	delete g_cvNetPublicAddr;
 
 	/* Generate map images */
 	char sThumb[256], sThumbailURL[256];
