@@ -5,29 +5,21 @@
 #pragma newdecls required
 
 #define WEBHOOK_URL_MAX_SIZE	1000
+#define WEBHOOK_THREAD_NAME_MAX_SIZE	100
 
 bool g_bPreMapEnd = false
 
-ConVar 
-	g_cvAvatar,
-	g_cvUsername,
-	g_cvColorStart,
-	g_cvColorEnd,
-	g_cvWebhook, 
-	g_cvWebhookRetry,
-	g_cvEndOfMapInfo, 
-	g_cvNetPublicAddr, 
-	g_cvRedirectURL,
-	g_cvMapThumbailURL,
-	g_cvPort,
-	g_cCountBots;
+ConVar g_cvAvatar, g_cvUsername, g_cvColorStart, g_cvColorEnd,
+	g_cvWebhook, g_cvWebhookRetry, g_cvChannelType, g_cvThreadName, g_cvThreadID,
+	g_cvEndOfMapInfo, g_cvNetPublicAddr, g_cvRedirectURL, g_cvMapThumbailURL,
+	g_cvPort, g_cCountBots;
 
 public Plugin myinfo = 
 {
 	name = "MapNotification",
 	author = "maxime1907, .Rushaway",
 	description = "Sends a server info message to discord on map start",
-	version = "2.0.2",
+	version = "2.1.0",
 	url = ""
 };
 
@@ -37,13 +29,18 @@ public void OnPluginStart()
 	g_cvUsername = CreateConVar("sm_mapnotification_username", "Map Notification", "Discord username.");
 	g_cvColorStart = CreateConVar("sm_mapnotification_colors_start", "4244579", "Decimal color code for map START\nHex to Decimal - https://www.binaryhexconverter.com/hex-to-decimal-converter");
 	g_cvColorEnd = CreateConVar("sm_mapnotification_colors_end", "11678774", "Decimal color code for map END\nHex to Decimal - https://www.binaryhexconverter.com/hex-to-decimal-converter");
-	g_cvWebhook = CreateConVar("sm_mapnotification_webhook", "", "The webhook URL of your Discord channel.", FCVAR_PROTECTED);
-	g_cvWebhookRetry = CreateConVar("sm_mapnotification_webhook_retry", "3", "Number of retries if webhook fails.", FCVAR_PROTECTED);
 	g_cvEndOfMapInfo = CreateConVar("sm_mapnotification_endmap_info", "1", "Print a notification for the map end.", _, true, 0.0, true, 1.0);
 	g_cCountBots = CreateConVar("sm_mapnotification_count_bots", "1", "Should we count bots as players ?[0 = No, 1 = Yes]", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_cvRedirectURL = CreateConVar("sm_mapnotification_redirect", "https://nide.gg/connect/", "URL to your redirect.php file.");
 	g_cvMapThumbailURL = CreateConVar("sm_mapnotification_mapthumbailurl", "https://bans.nide.gg/images/maps/", "URL where you store map thumbail files. (.JPG ONLY)");
 
+	g_cvWebhook = CreateConVar("sm_mapnotification_webhook", "", "The webhook URL of your Discord channel.", FCVAR_PROTECTED);
+	g_cvWebhookRetry = CreateConVar("sm_mapnotification_webhook_retry", "3", "Number of retries if webhook fails.", FCVAR_PROTECTED);
+	g_cvChannelType = CreateConVar("sm_mapnotification_channel_type", "0", "Type of your channel: (1 = Thread, 0 = Classic Text channel");
+
+	/* Thread config */
+	g_cvThreadName = CreateConVar("sm_mapnotification_threadname", "Map Notifications - Analytics", "The Thread Name of your Discord forums. (If not empty, will create a new thread)", FCVAR_PROTECTED);
+	g_cvThreadID = CreateConVar("sm_mapnotification_threadid", "0", "If thread_id is provided, the message will send in that thread.", FCVAR_PROTECTED);
 	AutoExecConfig(true);
 
 	RegAdminCmd("sm_mapnotification", Command_ForceMessage, ADMFLAG_ROOT, "Test the discord map notification");
@@ -155,6 +152,31 @@ public Action Timer_SendMessage(Handle timer)
 
 	/* Let's build the Embed */
 	Webhook webhook = new Webhook("");
+
+	char sThreadID[32], sThreadName[WEBHOOK_THREAD_NAME_MAX_SIZE];
+	g_cvThreadID.GetString(sThreadID, sizeof sThreadID);
+	g_cvThreadName.GetString(sThreadName, sizeof sThreadName);
+
+	bool IsThread = g_cvChannelType.BoolValue;
+
+	if (IsThread)
+	{
+		if (!sThreadName[0] && !sThreadID[0])
+		{
+			LogError("[MapNotifications] Thread Name or ThreadID not found or specified.");
+			delete webhook;
+			return Plugin_Handled;
+		}
+		else
+		{
+			if (strlen(sThreadName) > 0)
+			{
+				webhook.SetThreadName(sThreadName);
+				sThreadID[0] = '\0';
+			}
+		}
+	}
+
 	webhook.SetUsername(sName);
 	webhook.SetAvatarURL(sAvatar);
 	
@@ -207,18 +229,31 @@ public Action Timer_SendMessage(Handle timer)
 	/* Generate the Embed */
 	webhook.AddEmbed(Embed_1);
 
+	DataPack pack = new DataPack();
+	if (IsThread && strlen(sThreadName) <= 0 && strlen(sThreadID) > 0)
+		pack.WriteCell(1);
+	else
+		pack.WriteCell(0);
+	pack.WriteString(sWebhookURL);
+
 	/* Push the message */
-	webhook.Execute(sWebhookURL, OnWebHookExecuted);
+	webhook.Execute(sWebhookURL, OnWebHookExecuted, pack, sThreadID);
 	delete webhook;
 
 	return Plugin_Handled;
 }
 
-public void OnWebHookExecuted(HTTPResponse response, any data)
+public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
 {
 	static int retries = 0;
+	char sWebhookURL[WEBHOOK_URL_MAX_SIZE];
 
-	if (response.Status != HTTPStatus_OK)
+	pack.Reset();
+	bool IsThreadReply = pack.ReadCell();
+	pack.ReadString(sWebhookURL, sizeof(sWebhookURL));
+	delete pack;
+	
+	if (!IsThreadReply && response.Status != HTTPStatus_OK)
 	{
 		if (retries < g_cvWebhookRetry.IntValue)
 		{
@@ -230,6 +265,23 @@ public void OnWebHookExecuted(HTTPResponse response, any data)
 		else
 		{
 			LogError("[MapNotifcations] Failed to send the webhook after %d retries, aborting.", retries);
+			return;
+		}
+	}
+
+	if (IsThreadReply && response.Status != HTTPStatus_NoContent)
+	{
+		if (retries < g_cvWebhookRetry.IntValue)
+		{
+			PrintToServer("[MapNotifcations] Failed to send the webhook. Resending it .. (%d/%d)", retries, g_cvWebhookRetry.IntValue);
+			CreateTimer(0.1, Timer_SendMessage, _, TIMER_FLAG_NO_MAPCHANGE);
+			retries++;
+			return;
+		}
+		else
+		{
+			LogError("[MapNotifcations] Failed to send the webhook after %d retries, aborting.", retries);
+			return;
 		}
 	}
 
