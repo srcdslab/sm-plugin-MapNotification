@@ -1,13 +1,20 @@
+#pragma semicolon 1
+#pragma newdecls required
+
 #include <sourcemod>
 #include <discordWebhookAPI>
 #include "utilshelper.inc"
 
-#pragma newdecls required
+#undef REQUIRE_PLUGIN
+#tryinclude <ExtendedDiscord>
+#define REQUIRE_PLUGIN
 
+#define PLUGIN_NAME "Map Notification"
 #define WEBHOOK_URL_MAX_SIZE	1000
 #define WEBHOOK_THREAD_NAME_MAX_SIZE	100
 
-bool g_bPreMapEnd = false
+bool g_bPreMapEnd = false;
+bool g_Plugin_ExtDiscord = false;
 
 ConVar g_cvAvatar, g_cvUsername, g_cvColorStart, g_cvColorEnd,
 	g_cvWebhook, g_cvWebhookRetry, g_cvChannelType, g_cvThreadName, g_cvThreadID,
@@ -16,11 +23,11 @@ ConVar g_cvAvatar, g_cvUsername, g_cvColorStart, g_cvColorEnd,
 
 public Plugin myinfo = 
 {
-	name = "MapNotification",
+	name = PLUGIN_NAME,
 	author = "maxime1907, .Rushaway",
 	description = "Sends a server info message to discord on map start",
 	version = "2.1.0",
-	url = ""
+	url = "https://github.com/srcdslab/sm-plugin-MapNotification"
 };
 
 public void OnPluginStart()
@@ -48,6 +55,23 @@ public void OnPluginStart()
 	HookEvent("cs_win_panel_match", Event_WinPanel);
 }
 
+public void OnAllPluginsLoaded()
+{
+	g_Plugin_ExtDiscord = LibraryExists("ExtendedDiscord");
+}
+
+public void OnLibraryAdded(const char[] sName)
+{
+	if (strcmp(sName, "ExtendedDiscord", false) == 0)
+		g_Plugin_ExtDiscord = true;
+}
+
+public void OnLibraryRemoved(const char[] sName)
+{
+	if (strcmp(sName, "ExtendedDiscord", false) == 0)
+		g_Plugin_ExtDiscord = false;
+}
+
 public void OnMapStart()
 {
 	g_bPreMapEnd = false;
@@ -73,9 +97,8 @@ public void Event_WinPanel(Handle event, const char[] name, bool dontBroadcast)
 
 public Action Command_ForceMessage(int client, int argc)
 {
-	if (argc < 1)
-		CreateTimer(0.1, Timer_SendMessage, _, TIMER_FLAG_NO_MAPCHANGE);
-	ReplyToCommand(client, "[MapNotificaiton] Executing SendMessage function.");
+	CreateTimer(0.1, Timer_SendMessage, _, TIMER_FLAG_NO_MAPCHANGE);
+	ReplyToCommand(client, "[%s] Executing SendMessage function.", PLUGIN_NAME);
 	return Plugin_Handled;
 }
 
@@ -85,15 +108,13 @@ public Action Timer_SendMessage(Handle timer)
 	g_cvWebhook.GetString(sWebhookURL, sizeof sWebhookURL);
 	if (!sWebhookURL[0])
 	{
-		LogError("[MapNotifications] No webhook found or specified.");
+		LogError("[%s] No webhook found or specified.", PLUGIN_NAME);
 		return Plugin_Handled;
 	}
 
 	/* Webhook UserName */
 	char sName[128];
 	g_cvUsername.GetString(sName, sizeof(sName));
-	if (strlen(sName) < 1)
-		FormatEx(sName, sizeof(sName), "Map Notification");
 
 	/* Webhook Avatar */
 	char sAvatar[256];
@@ -159,26 +180,23 @@ public Action Timer_SendMessage(Handle timer)
 
 	bool IsThread = g_cvChannelType.BoolValue;
 
-	if (IsThread)
-	{
-		if (!sThreadName[0] && !sThreadID[0])
-		{
-			LogError("[MapNotifications] Thread Name or ThreadID not found or specified.");
+	if (IsThread) {
+		if (!sThreadName[0] && !sThreadID[0]) {
+			LogError("[%s] Thread Name or ThreadID not found or specified.", PLUGIN_NAME);
 			delete webhook;
-			return Plugin_Handled;
-		}
-		else
-		{
-			if (strlen(sThreadName) > 0)
-			{
+			return Plugin_Stop;
+		} else {
+			if (strlen(sThreadName) > 0) {
 				webhook.SetThreadName(sThreadName);
 				sThreadID[0] = '\0';
 			}
 		}
 	}
 
-	webhook.SetUsername(sName);
-	webhook.SetAvatarURL(sAvatar);
+	if (strlen(sName) > 0)
+		webhook.SetUsername(sName);
+	if (strlen(sAvatar) > 0)
+		webhook.SetAvatarURL(sAvatar);
 	
 	/* Header */
 	Embed Embed_1 = new Embed(sHostname);
@@ -240,7 +258,7 @@ public Action Timer_SendMessage(Handle timer)
 	webhook.Execute(sWebhookURL, OnWebHookExecuted, pack, sThreadID);
 	delete webhook;
 
-	return Plugin_Handled;
+	return Plugin_Continue;
 }
 
 public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
@@ -253,42 +271,45 @@ public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
 	pack.ReadString(sWebhookURL, sizeof(sWebhookURL));
 	delete pack;
 	
-	if (!IsThreadReply && response.Status != HTTPStatus_OK)
-	{
-		if (retries < g_cvWebhookRetry.IntValue)
-		{
-			PrintToServer("[MapNotifcations] Failed to send the webhook. Resending it .. (%d/%d)", retries, g_cvWebhookRetry.IntValue);
+	if (!IsThreadReply && response.Status != HTTPStatus_OK) {
+		if (retries < g_cvWebhookRetry.IntValue) {
+			PrintToServer("[%s] Failed to send the webhook. Resending it .. (%d/%d)", PLUGIN_NAME, retries, g_cvWebhookRetry.IntValue);
 			CreateTimer(0.1, Timer_SendMessage, _, TIMER_FLAG_NO_MAPCHANGE);
 			retries++;
 			return;
-		}
-		else
-		{
-			LogError("[MapNotifcations] Failed to send the webhook after %d retries, aborting.", retries);
-			return;
+		} else {
+		#if defined _extendeddiscord_included
+			if (g_Plugin_ExtDiscord)
+				ExtendedDiscord_LogError("[%s] Failed to send the webhook after %d retries, aborting.", PLUGIN_NAME, retries);
+			else
+				LogError("[%s] Failed to send the webhook after %d retries, aborting.", PLUGIN_NAME, retries);
+		#else
+			LogError("[%s] Failed to send the webhook after %d retries, aborting.", PLUGIN_NAME, retries);
+		#endif
 		}
 	}
-
-	if (IsThreadReply && response.Status != HTTPStatus_NoContent)
-	{
-		if (retries < g_cvWebhookRetry.IntValue)
-		{
-			PrintToServer("[MapNotifcations] Failed to send the webhook. Resending it .. (%d/%d)", retries, g_cvWebhookRetry.IntValue);
+	else if (IsThreadReply && response.Status != HTTPStatus_NoContent) {
+		if (retries < g_cvWebhookRetry.IntValue) {
+			PrintToServer("[%s] Failed to send the webhook. Resending it .. (%d/%d)", PLUGIN_NAME, retries, g_cvWebhookRetry.IntValue);
 			CreateTimer(0.1, Timer_SendMessage, _, TIMER_FLAG_NO_MAPCHANGE);
 			retries++;
 			return;
-		}
-		else
-		{
-			LogError("[MapNotifcations] Failed to send the webhook after %d retries, aborting.", retries);
-			return;
+		} else {
+		#if defined _extendeddiscord_included
+			if (g_Plugin_ExtDiscord)
+				ExtendedDiscord_LogError("[%s] Failed to send the webhook after %d retries, aborting.", PLUGIN_NAME, retries);
+			else
+				LogError("[%s] Failed to send the webhook after %d retries, aborting.", PLUGIN_NAME, retries);
+		#else
+			LogError("[%s] Failed to send the webhook after %d retries, aborting.", PLUGIN_NAME, retries);
+		#endif
 		}
 	}
 
 	retries = 0;
 }
 
-int GetColor()
+stock int GetColor()
 {
 	if (g_bPreMapEnd)
 		return g_cvColorEnd.IntValue;
