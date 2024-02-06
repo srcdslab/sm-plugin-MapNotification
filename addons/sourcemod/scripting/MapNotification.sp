@@ -10,8 +10,6 @@
 #define REQUIRE_PLUGIN
 
 #define PLUGIN_NAME "Map Notification"
-#define WEBHOOK_URL_MAX_SIZE	1000
-#define WEBHOOK_THREAD_NAME_MAX_SIZE	100
 
 bool g_bPreMapEnd = false;
 bool g_Plugin_ExtDiscord = false;
@@ -26,7 +24,7 @@ public Plugin myinfo =
 	name = PLUGIN_NAME,
 	author = "maxime1907, .Rushaway",
 	description = "Sends a server info message to discord on map start",
-	version = "2.1.0",
+	version = "2.1.1",
 	url = "https://github.com/srcdslab/sm-plugin-MapNotification"
 };
 
