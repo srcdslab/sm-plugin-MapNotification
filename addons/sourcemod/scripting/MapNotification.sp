@@ -17,14 +17,14 @@ bool g_Plugin_ExtDiscord = false;
 ConVar g_cvAvatar, g_cvUsername, g_cvColorStart, g_cvColorEnd,
 	g_cvWebhook, g_cvWebhookRetry, g_cvChannelType, g_cvThreadName, g_cvThreadID,
 	g_cvEndOfMapInfo, g_cvNetPublicAddr, g_cvRedirectURL, g_cvMapThumbailURL,
-	g_cvPort, g_cCountBots;
+	g_cvPort, g_cCountBots, g_cvDetectionIP;
 
 public Plugin myinfo = 
 {
 	name = PLUGIN_NAME,
 	author = "maxime1907, .Rushaway",
 	description = "Sends a server info message to discord on map start",
-	version = "2.1.1",
+	version = "2.1.2",
 	url = "https://github.com/srcdslab/sm-plugin-MapNotification"
 };
 
@@ -42,6 +42,8 @@ public void OnPluginStart()
 	g_cvWebhook = CreateConVar("sm_mapnotification_webhook", "", "The webhook URL of your Discord channel.", FCVAR_PROTECTED);
 	g_cvWebhookRetry = CreateConVar("sm_mapnotification_webhook_retry", "3", "Number of retries if webhook fails.", FCVAR_PROTECTED);
 	g_cvChannelType = CreateConVar("sm_mapnotification_channel_type", "0", "Type of your channel: (1 = Thread, 0 = Classic Text channel");
+
+	g_cvDetectionIP = CreateConVar("sm_mapnotification_detection_ip", "0", "Detect the public IP or net_public_adr for servers behind NAT/DHCP. [0 = Public IP | 1 = NAT/DHCP]", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 
 	/* Thread config */
 	g_cvThreadName = CreateConVar("sm_mapnotification_threadname", "Map Notifications - Analytics", "The Thread Name of your Discord forums. (If not empty, will create a new thread)", FCVAR_PROTECTED);
@@ -146,19 +148,32 @@ public Action Timer_SendMessage(Handle timer)
 	int Color = GetColor();
 
 	/* Quick Connect */
-	g_cvPort = FindConVar("hostport");
-	g_cvNetPublicAddr = FindConVar("net_public_adr");
+	int iServerIP;
+	char sConnect[256], sURL[256], sNetIP[128], sNetPort[32];
 
-	char sConnect[256], sURL[256], sNetIP[32], sNetPort[32];
+	g_cvPort = FindConVar("hostport");
+
+	if (g_cvDetectionIP.BoolValue)
+	{
+		g_cvNetPublicAddr = FindConVar("net_public_adr");
+	}
+	else
+	{
+		g_cvNetPublicAddr = FindConVar("hostip");
+		iServerIP = GetConVarInt(g_cvNetPublicAddr);
+		int ipUnsigned = iServerIP & 0xFFFFFFFF;
+		Format(sNetIP, sizeof(sNetIP), "%d.%d.%d.%d", (ipUnsigned >> 24) & 0xFF, (ipUnsigned >> 16) & 0xFF, (ipUnsigned >> 8) & 0xFF, ipUnsigned & 0xFF);
+	}
+
 	GetConVarString(g_cvRedirectURL, sURL, sizeof(sURL));
 
 	if (g_cvPort != null)
-		GetConVarString(g_cvPort, sNetPort, sizeof (sNetPort));
+		GetConVarString(g_cvPort, sNetPort, sizeof(sNetPort));
 
-	if (g_cvNetPublicAddr != null)
+	if (g_cvDetectionIP.BoolValue && g_cvNetPublicAddr != null)
 		GetConVarString(g_cvNetPublicAddr, sNetIP, sizeof(sNetIP));
 
-	Format(sConnect, sizeof(sConnect), "[%s:%s](%s?ip=%s&port=%s)", sNetIP, sNetPort, sURL, sNetIP, sNetPort);
+	Format(sConnect, sizeof(sConnect), "[%s:%s](%s?ip=%s)", sNetIP, sNetPort, sURL, sNetPort);
 
 	delete g_cvPort;
 	delete g_cvNetPublicAddr;
