@@ -24,7 +24,7 @@ public Plugin myinfo =
 	name = PLUGIN_NAME,
 	author = "maxime1907, .Rushaway",
 	description = "Sends a server info message to discord on map start",
-	version = "2.1.1",
+	version = "2.1.2",
 	url = "https://github.com/srcdslab/sm-plugin-MapNotification"
 };
 
@@ -155,8 +155,10 @@ public Action Timer_SendMessage(Handle timer)
 	if (g_cvPort != null)
 		GetConVarString(g_cvPort, sNetPort, sizeof (sNetPort));
 
-	if (g_cvNetPublicAddr != null)
-		GetConVarString(g_cvNetPublicAddr, sNetIP, sizeof(sNetIP));
+	if (g_cvNetPublicAddr == null)
+		g_cvNetPublicAddr = FindConVar("hostip");
+
+	GetConVarString(g_cvNetPublicAddr, sNetIP, sizeof(sNetIP));
 
 	Format(sConnect, sizeof(sConnect), "[%s:%s](%s?ip=%s&port=%s)", sNetIP, sNetPort, sURL, sNetIP, sNetPort);
 
