@@ -24,7 +24,7 @@ public Plugin myinfo =
 	name = PLUGIN_NAME,
 	author = "maxime1907, .Rushaway",
 	description = "Sends a server info message to discord on map start",
-	version = "2.1.2",
+	version = "2.1.3",
 	url = "https://github.com/srcdslab/sm-plugin-MapNotification"
 };
 
@@ -95,7 +95,7 @@ public void Event_WinPanel(Handle event, const char[] name, bool dontBroadcast)
 
 public Action Command_ForceMessage(int client, int argc)
 {
-	CreateTimer(0.1, Timer_SendMessage, _, TIMER_FLAG_NO_MAPCHANGE);
+	Timer_SendMessage(INVALID_HANDLE);
 	ReplyToCommand(client, "[%s] Executing SendMessage function.", PLUGIN_NAME);
 	return Plugin_Handled;
 }
@@ -107,7 +107,7 @@ public Action Timer_SendMessage(Handle timer)
 	if (!sWebhookURL[0])
 	{
 		LogError("[%s] No webhook found or specified.", PLUGIN_NAME);
-		return Plugin_Handled;
+		return Plugin_Stop;
 	}
 
 	/* Webhook UserName */
@@ -258,7 +258,7 @@ public Action Timer_SendMessage(Handle timer)
 	webhook.Execute(sWebhookURL, OnWebHookExecuted, pack, sThreadID);
 	delete webhook;
 
-	return Plugin_Continue;
+	return Plugin_Stop;
 }
 
 public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
