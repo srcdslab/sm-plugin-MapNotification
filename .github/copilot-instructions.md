@@ -10,19 +10,18 @@ addons/sourcemod/scripting/
 .github/
 ├── workflows/ci.yml           # GitHub Actions CI/CD pipeline
 ├── dependabot.yml            # Dependency updates configuration
-sourceknight.yaml             # Build configuration and dependencies
 ```
 
 ## Technical Environment
 - **Language**: SourcePawn
-- **Platform**: SourceMod 1.11.0+ (latest stable from sourceknight.yaml)
-- **Build Tool**: SourceKnight (automated dependency management)
-- **Compiler**: SourcePawn compiler (spcomp) via SourceKnight
+- **Platform**: SourceMod 1.12.x
+- **Build Tool**: Native GitHub Actions (rumblefrog/setup-sp)
+- **Compiler**: SourcePawn compiler (spcomp) via setup-sp
 - **Target**: Source engine game servers (CS:GO/CS2)
 
 ## Key Dependencies
-The plugin relies on several external libraries managed through `sourceknight.yaml`:
-- **SourceMod**: Core platform (1.11.0-git6934+)
+The plugin relies on several external libraries fetched during CI (see `.github/workflows/ci.yml`):
+- **SourceMod**: Core platform (1.12.x)
 - **DiscordWebhookAPI**: For Discord webhook integration
 - **utilshelper**: Utility functions (external repository dependency)
 - **Extended-Discord**: Optional enhanced Discord integration
@@ -76,17 +75,12 @@ ConVar naming convention: `sm_mapnotification_<feature>_<setting>`
 - Thread configuration priority: thread_id > thread_name > regular channel
 
 ## Build Process
-This project uses SourceKnight for automated building:
+This project uses native GitHub Actions for automated building:
 
-1. **Dependencies**: Automatically fetched via `sourceknight.yaml`
-2. **Build Command**: Use GitHub Actions or SourceKnight CLI
-3. **Output**: Compiled `.smx` files in `/addons/sourcemod/plugins`
+1. **Dependencies**: Cloned directly from their GitHub repositories in the `Install dependencies` CI step
+2. **Build Command**: `spcomp` via `rumblefrog/setup-sp` (see `.github/workflows/ci.yml`)
+3. **Output**: Compiled `.smx` files in `addons/sourcemod/plugins`
 4. **Packaging**: Automated via CI/CD to `.tar.gz` releases
-
-To build locally (if SourceKnight is available):
-```bash
-sourceknight build
-```
 
 ## Testing Approach
 - **Manual Testing**: Use admin command `sm_mapnotification` to test webhook delivery
