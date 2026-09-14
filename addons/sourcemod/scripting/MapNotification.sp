@@ -15,7 +15,7 @@ bool g_bPreMapEnd = false;
 bool g_Plugin_ExtDiscord = false;
 
 ConVar g_cvAvatar, g_cvUsername, g_cvColorStart, g_cvColorEnd,
-	g_cvWebhook, g_cvWebhookRetry, g_cvChannelType, g_cvThreadName, g_cvThreadID,
+	g_cvWebhook, g_cvWebhookRetry, g_cvThreadName, g_cvThreadID,
 	g_cvEndOfMapInfo, g_cvNetPublicAddr, g_cvRedirectURL, g_cvMapThumbailURL,
 	g_cvPort, g_cCountBots;
 
@@ -24,7 +24,7 @@ public Plugin myinfo =
 	name = PLUGIN_NAME,
 	author = "maxime1907, .Rushaway",
 	description = "Sends a server info message to discord on map start",
-	version = "2.1.3",
+	version = "2.2.0",
 	url = "https://github.com/srcdslab/sm-plugin-MapNotification"
 };
 
@@ -41,7 +41,6 @@ public void OnPluginStart()
 
 	g_cvWebhook = CreateConVar("sm_mapnotification_webhook", "", "The webhook URL of your Discord channel.", FCVAR_PROTECTED);
 	g_cvWebhookRetry = CreateConVar("sm_mapnotification_webhook_retry", "3", "Number of retries if webhook fails.", FCVAR_PROTECTED);
-	g_cvChannelType = CreateConVar("sm_mapnotification_channel_type", "0", "Type of your channel: (1 = Thread, 0 = Classic Text channel");
 
 	/* Thread config */
 	g_cvThreadName = CreateConVar("sm_mapnotification_threadname", "Map Notifications - Analytics", "The Thread Name of your Discord forums. (If not empty, will create a new thread)", FCVAR_PROTECTED);
@@ -178,25 +177,12 @@ public Action Timer_SendMessage(Handle timer)
 	g_cvThreadID.GetString(sThreadID, sizeof sThreadID);
 	g_cvThreadName.GetString(sThreadName, sizeof sThreadName);
 
-	bool IsThread = g_cvChannelType.BoolValue;
-
-	if (IsThread) {
-		if (!sThreadName[0] && !sThreadID[0]) {
-			LogError("[%s] Thread Name or ThreadID not found or specified.", PLUGIN_NAME);
-			delete webhook;
-			return Plugin_Stop;
-		} else {
-			if (strlen(sThreadName) > 0) {
-				webhook.SetThreadName(sThreadName);
-				sThreadID[0] = '\0';
-			}
-		}
-	}
-
 	if (strlen(sName) > 0)
 		webhook.SetUsername(sName);
 	if (strlen(sAvatar) > 0)
 		webhook.SetAvatarURL(sAvatar);
+	if (strlen(sThreadName) > 0)
+		webhook.SetThreadName(sThreadName);
 	
 	/* Header */
 	Embed Embed_1 = new Embed(sHostname);
@@ -248,10 +234,7 @@ public Action Timer_SendMessage(Handle timer)
 	webhook.AddEmbed(Embed_1);
 
 	DataPack pack = new DataPack();
-	if (IsThread && strlen(sThreadName) <= 0 && strlen(sThreadID) > 0)
-		pack.WriteCell(1);
-	else
-		pack.WriteCell(0);
+
 	pack.WriteString(sWebhookURL);
 
 	/* Push the message */
@@ -267,11 +250,10 @@ public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
 	char sWebhookURL[WEBHOOK_URL_MAX_SIZE];
 
 	pack.Reset();
-	bool IsThreadReply = pack.ReadCell();
 	pack.ReadString(sWebhookURL, sizeof(sWebhookURL));
 	delete pack;
 	
-	if ((!IsThreadReply && response.Status != HTTPStatus_OK) || (IsThreadReply && response.Status != HTTPStatus_NoContent))
+	if (response.Status != HTTPStatus_OK && response.Status != HTTPStatus_NoContent)
 	{
 		if (retries < g_cvWebhookRetry.IntValue) {
 			PrintToServer("[%s] Failed to send the webhook. Resending it .. (%d/%d)", PLUGIN_NAME, retries, g_cvWebhookRetry.IntValue);
