@@ -94,12 +94,12 @@ public void Event_WinPanel(Handle event, const char[] name, bool dontBroadcast)
 
 public Action Command_ForceMessage(int client, int argc)
 {
-	Timer_SendMessage(INVALID_HANDLE);
+	Timer_SendMessage(INVALID_HANDLE, 0);
 	ReplyToCommand(client, "[%s] Executing SendMessage function.", PLUGIN_NAME);
 	return Plugin_Handled;
 }
 
-public Action Timer_SendMessage(Handle timer)
+public Action Timer_SendMessage(Handle timer, int retries)
 {
 	char sWebhookURL[WEBHOOK_URL_MAX_SIZE];
 	g_cvWebhook.GetString(sWebhookURL, sizeof sWebhookURL);
@@ -236,6 +236,7 @@ public Action Timer_SendMessage(Handle timer)
 	DataPack pack = new DataPack();
 
 	pack.WriteString(sWebhookURL);
+	pack.WriteCell(retries);
 
 	/* Push the message */
 	webhook.Execute(sWebhookURL, OnWebHookExecuted, pack, sThreadID);
@@ -246,19 +247,18 @@ public Action Timer_SendMessage(Handle timer)
 
 public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
 {
-	static int retries = 0;
 	char sWebhookURL[WEBHOOK_URL_MAX_SIZE];
 
 	pack.Reset();
 	pack.ReadString(sWebhookURL, sizeof(sWebhookURL));
+	int retries = pack.ReadCell();
 	delete pack;
-	
+
 	if (response.Status != HTTPStatus_OK && response.Status != HTTPStatus_NoContent)
 	{
 		if (retries < g_cvWebhookRetry.IntValue) {
 			PrintToServer("[%s] Failed to send the webhook. Resending it .. (%d/%d)", PLUGIN_NAME, retries, g_cvWebhookRetry.IntValue);
-			CreateTimer(0.1, Timer_SendMessage, _, TIMER_FLAG_NO_MAPCHANGE);
-			retries++;
+			CreateTimer(0.1, Timer_SendMessage, retries + 1, TIMER_FLAG_NO_MAPCHANGE);
 			return;
 		} else {
 			if (!g_Plugin_ExtDiscord)
@@ -269,8 +269,6 @@ public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
 		#endif
 		}
 	}
-
-	retries = 0;
 }
 
 stock int GetColor()
