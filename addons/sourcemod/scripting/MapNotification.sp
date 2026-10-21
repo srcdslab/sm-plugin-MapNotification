@@ -24,7 +24,7 @@ public Plugin myinfo =
 	name = PLUGIN_NAME,
 	author = "maxime1907, .Rushaway",
 	description = "Sends a server info message to discord on map start",
-	version = "2.2.1",
+	version = "2.2.2",
 	url = "https://github.com/srcdslab/sm-plugin-MapNotification"
 };
 
@@ -75,7 +75,7 @@ public void OnMapStart()
 	CreateTimer(5.0, Timer_SendMessage, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
-public void Event_WinPanel(Handle event, const char[] name, bool dontBroadcast)
+public void Event_WinPanel(Event event, const char[] name, bool dontBroadcast)
 {
 	if (!g_cvEndOfMapInfo)
 		return;
@@ -94,7 +94,7 @@ public void Event_WinPanel(Handle event, const char[] name, bool dontBroadcast)
 
 public Action Command_ForceMessage(int client, int argc)
 {
-	Timer_SendMessage(INVALID_HANDLE, 0);
+	Timer_SendMessage(null, 0);
 	ReplyToCommand(client, "[%s] Executing SendMessage function.", PLUGIN_NAME);
 	return Plugin_Handled;
 }
@@ -135,7 +135,7 @@ public Action Timer_SendMessage(Handle timer, int retries)
 	if (g_cCountBots.BoolValue)
 	{
 		ConVar bot = FindConVar("bot_quota");
-		int iBots = GetConVarInt(bot);
+		int iBots = bot.IntValue;
 		iConnected = iConnected - iBots;
 		delete bot;
 	}
@@ -149,15 +149,15 @@ public Action Timer_SendMessage(Handle timer, int retries)
 	g_cvNetPublicAddr = FindConVar("net_public_adr");
 
 	char sConnect[256], sURL[256], sNetIP[32], sNetPort[32];
-	GetConVarString(g_cvRedirectURL, sURL, sizeof(sURL));
+	g_cvRedirectURL.GetString(sURL, sizeof(sURL));
 
 	if (g_cvPort != null)
-		GetConVarString(g_cvPort, sNetPort, sizeof (sNetPort));
+		g_cvPort.GetString(sNetPort, sizeof (sNetPort));
 
 	if (g_cvNetPublicAddr == null)
 		g_cvNetPublicAddr = FindConVar("hostip");
 
-	GetConVarString(g_cvNetPublicAddr, sNetIP, sizeof(sNetIP));
+	g_cvNetPublicAddr.GetString(sNetIP, sizeof(sNetIP));
 
 	Format(sConnect, sizeof(sConnect), "[%s:%s](%s?ip=%s&port=%s)", sNetIP, sNetPort, sURL, sNetIP, sNetPort);
 
@@ -167,7 +167,7 @@ public Action Timer_SendMessage(Handle timer, int retries)
 	/* Generate map images */
 	char sThumb[256], sThumbailURL[256];
 	StringToLowerCase(sMapNameLower);
-	GetConVarString(g_cvMapThumbailURL, sThumbailURL, sizeof(sThumbailURL));
+	g_cvMapThumbailURL.GetString(sThumbailURL, sizeof(sThumbailURL));
 	Format(sThumb, sizeof(sThumb), "%s/%s.jpg", sThumbailURL, sMapNameLower);
 
 	/* Let's build the Embed */
