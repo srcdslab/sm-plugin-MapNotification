@@ -24,7 +24,7 @@ public Plugin myinfo =
 	name = PLUGIN_NAME,
 	author = "maxime1907, .Rushaway",
 	description = "Sends a server info message to discord on map start",
-	version = "2.2.2",
+	version = "2.2.3",
 	url = "https://github.com/srcdslab/sm-plugin-MapNotification"
 };
 
